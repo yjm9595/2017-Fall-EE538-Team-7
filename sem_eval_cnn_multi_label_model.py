@@ -6,6 +6,10 @@ import xml_reader
 
 # Global Variable
 TRAINING_INDEX = 1315
+CATEGORY =['', 'RESTAURANT#GENERAL', 'SERVICE#GENERAL', 'FOOD#QUALITY', 'DRINKS#QUALITY', 'DRINKS#STYLE_OPTIONS',
+           'FOOD#PRICES', 'DRINKS#PRICES', 'RESTAURANT#MISCELLANEOUS', 'FOOD#STYLE_OPTIONS', 'LOCATION#GENERAL',
+           'RESTAURANT#PRICES', 'AMBIENCE#GENERAL']
+
 CATEGORY_INDEX = {
     '': 0,
     'RESTAURANT#GENERAL': 1,
@@ -13,7 +17,8 @@ CATEGORY_INDEX = {
     'FOOD#QUALITY': 3,
     'DRINKS#QUALITY': 4,
     'DRINKS#STYLE_OPTIONS': 5,
-    'FOOD#PRICES': 6, 'DRINKS#PRICES': 7,
+    'FOOD#PRICES': 6,
+    'DRINKS#PRICES': 7,
     'RESTAURANT#MISCELLANEOUS': 8,
     'FOOD#STYLE_OPTIONS': 9,
     'LOCATION#GENERAL': 10,
@@ -37,29 +42,13 @@ TRAIN_DATA = {
     'AMBIENCE#GENERAL': []
 }
 
-TEST_DATA = {
-    '': [],
-    'RESTAURANT#GENERAL': [],
-    'SERVICE#GENERAL': [],
-    'FOOD#QUALITY': [],
-    'DRINKS#QUALITY': [],
-    'DRINKS#STYLE_OPTIONS': [],
-    'FOOD#PRICES': [],
-    'DRINKS#PRICES': [],
-    'RESTAURANT#MISCELLANEOUS': [],
-    'FOOD#STYLE_OPTIONS': [],
-    'LOCATION#GENERAL': [],
-    'RESTAURANT#PRICES': [],
-    'AMBIENCE#GENERAL': []
-}
-
 # Word Embedding
 sem_eval_restaurant_model = Word2Vec.load("sem_eval_restaurant_model.vec")
 
 # Parameter
 learning_rate = 0.001
 training_epochs = 15
-batch_size = 1
+batch_size = 100
 n_epochs = 15
 
 
@@ -85,18 +74,6 @@ for text_data, category_data in zip(text_data_lst[:TRAINING_INDEX], category_dat
     else:
         for category in category_data:
             TRAIN_DATA[category].append(embedded_sentence_data)
-
-for text_data, category_data in zip(text_data_lst[:TRAINING_INDEX], category_data_lst[:TRAINING_INDEX]):
-    embedded_sentence_data = [list(sem_eval_restaurant_model.wv[word]) for word in text_data]
-
-    for _ in range(max_sentence_len - len(embedded_sentence_data)):
-        embedded_sentence_data.append([0.0] * 100)
-
-    if len(category_data) == 0:
-        TEST_DATA[""].append(embedded_sentence_data)
-    else:
-        for category in category_data:
-            TEST_DATA[category].append(embedded_sentence_data)
 
 
 # Model
@@ -155,34 +132,101 @@ class SemEvalSlot1CNNModel(object):
         # Global Variable Initialize
         self.sess.run(tf.global_variables_initializer())
 
+        total_batch = int(TRAINING_INDEX / batch_size) + 1
+
         for epoch in range(n_epochs):
-            for batch_x, batch_y in zip(self.input_data, self.output_data):
-                batch_x = np.expand_dims(batch_x, -1)
-                self.sess.run([optimizer, cost], feed_dict={self.X: [batch_x], self.Y: [batch_y]})
+
+            for i in range(total_batch):
+                index_start = i * batch_size
+                index_end = min(TRAINING_INDEX, (i + 1) * batch_size)
+                batch_xs = self.input_data[index_start:index_end]
+                batch_xs = np.expand_dims(batch_xs, -1)
+                batch_ys = self.output_data[index_start:index_end]
+                _, c = self.sess.run([optimizer, cost], feed_dict={self.X: batch_xs, self.Y: batch_ys})
             print("Label : {}, Epoch: {}".format(self.label, epoch + 1))
 
     def predict(self, text_lst):
         text_lst = np.expand_dims(text_lst, -1)
         d = self.sess.run(self.model, feed_dict={self.X: [text_lst]})
-        print(self.sess.run(tf.one_hot(tf.argmax(d, 1), 2)))
+        if self.sess.run(tf.argmax(d, 1))[0] == 0:
+            return 1
+        else:
+            return 0
 
 
 if __name__ == "__main__":
-    model0 = SemEvalSlot1CNNModel('')
+    models = [SemEvalSlot1CNNModel(cat) for cat in CATEGORY]
+
+    # for model in models:
+    #     model.train()
+    model0 = SemEvalSlot1CNNModel("")
+    model1 = SemEvalSlot1CNNModel('RESTAURANT#GENERAL')
+    model2 = SemEvalSlot1CNNModel('SERVICE#GENERAL')
+    model3 = SemEvalSlot1CNNModel('FOOD#QUALITY')
+    model4 = SemEvalSlot1CNNModel('DRINKS#QUALITY')
+    model5 = SemEvalSlot1CNNModel('DRINKS#STYLE_OPTIONS')
+    model6 = SemEvalSlot1CNNModel('FOOD#PRICES')
+    model7 = SemEvalSlot1CNNModel('DRINKS#PRICES')
+    model8 = SemEvalSlot1CNNModel('RESTAURANT#MISCELLANEOUS')
+    model9 = SemEvalSlot1CNNModel('FOOD#STYLE_OPTIONS')
+    model10 = SemEvalSlot1CNNModel('LOCATION#GENERAL')
+    model11 = SemEvalSlot1CNNModel('RESTAURANT#PRICES')
+    model12 = SemEvalSlot1CNNModel('AMBIENCE#GENERAL')
+
     model0.train()
-    model0.predict(TEST_DATA[''][0])
-    model0.predict(TEST_DATA[''][1])
-    model0.predict(TEST_DATA[''][2])
-    model0.predict(TEST_DATA[''][3])
-    model0.predict(TEST_DATA[''][4])
-    model0.predict(TEST_DATA['RESTAURANT#GENERAL'][0])
-    model0.predict(TEST_DATA['RESTAURANT#GENERAL'][1])
-    model0.predict(TEST_DATA['RESTAURANT#GENERAL'][2])
-    model0.predict(TEST_DATA['RESTAURANT#GENERAL'][3])
-    model0.predict(TEST_DATA['RESTAURANT#GENERAL'][4])
-    model0.predict(TEST_DATA['SERVICE#GENERAL'][0])
-    model0.predict(TEST_DATA['SERVICE#GENERAL'][1])
-    model0.predict(TEST_DATA['SERVICE#GENERAL'][2])
-    model0.predict(TEST_DATA['SERVICE#GENERAL'][3])
-    model0.predict(TEST_DATA['SERVICE#GENERAL'][4])
+    model1.train()
+    model2.train()
+    model3.train()
+    model4.train()
+    model5.train()
+    model6.train()
+    model7.train()
+    model8.train()
+    model9.train()
+    model10.train()
+    model11.train()
+    model12.train()
+
+    with open("sem_eval_slot1_epoch_{}_hidden_{}.txt".format(n_epochs, n_hidden), "w") as f:
+        index = 0
+        for text_data, category_data in zip(text_data_lst[TRAINING_INDEX:], category_data_lst[TRAINING_INDEX:]):
+            index += 1
+            print(index, "/ 685")
+            embedded_sentence_data = [list(sem_eval_restaurant_model.wv[word]) for word in text_data]
+            for _ in range(max_sentence_len - len(embedded_sentence_data)):
+                embedded_sentence_data.append([0.0] * 100)
+
+            pred_lst = [model0.predict(embedded_sentence_data),
+             model1.predict(embedded_sentence_data),
+             model2.predict(embedded_sentence_data),
+             model3.predict(embedded_sentence_data),
+             model4.predict(embedded_sentence_data),
+             model5.predict(embedded_sentence_data),
+             model6.predict(embedded_sentence_data),
+             model7.predict(embedded_sentence_data),
+             model8.predict(embedded_sentence_data),
+             model9.predict(embedded_sentence_data),
+             model10.predict(embedded_sentence_data),
+             model11.predict(embedded_sentence_data),
+             model12.predict(embedded_sentence_data)]
+            print("{0:<10} :".format("Predction"), pred_lst)
+            f.write("".join([str(x) for x in pred_lst]) + "\n")
+
+            # 중복 제거
+            cat_lst = list(set(category_data))
+            cat_index_lst = [CATEGORY_INDEX[cat] for cat in cat_lst]
+
+            if len(cat_index_lst) == 0:
+                #print("{0:<10} :".format("True set"), [1] + [0] * 12)
+                f.write("1" + "0" * 12 + "\n")
+            else:
+                #print("{0:<10} :".format("True set"), [1 if x in cat_index_lst else 0 for x in range(13)])
+                f.write("".join(["1" if x in cat_index_lst else "0" for x in range(13)]) + "\n")
+
+
+
+
+
+
+
 
