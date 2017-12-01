@@ -6,12 +6,12 @@ import xml_reader
 
 # Global Variable
 TRAINING_INDEX = 1315
-CATEGORY =['', 'RESTAURANT#GENERAL', 'SERVICE#GENERAL', 'FOOD#QUALITY', 'DRINKS#QUALITY', 'DRINKS#STYLE_OPTIONS',
+CATEGORY =['RESTAURANT#GENERAL', 'SERVICE#GENERAL', 'FOOD#QUALITY', 'DRINKS#QUALITY', 'DRINKS#STYLE_OPTIONS',
            'FOOD#PRICES', 'DRINKS#PRICES', 'RESTAURANT#MISCELLANEOUS', 'FOOD#STYLE_OPTIONS', 'LOCATION#GENERAL',
            'RESTAURANT#PRICES', 'AMBIENCE#GENERAL']
 
 CATEGORY_INDEX = {
-    '': 0,
+    'NIL': 0,
     'RESTAURANT#GENERAL': 1,
     'SERVICE#GENERAL': 2,
     'FOOD#QUALITY': 3,
@@ -27,7 +27,7 @@ CATEGORY_INDEX = {
 }
 
 TRAIN_DATA = {
-    '': [],
+    'NIL': [],
     'RESTAURANT#GENERAL': [],
     'SERVICE#GENERAL': [],
     'FOOD#QUALITY': [],
@@ -43,22 +43,22 @@ TRAIN_DATA = {
 }
 
 # Word Embedding
-sem_eval_restaurant_model = Word2Vec.load("sem_eval_restaurant_model.vec")
+sem_eval_restaurant_model = Word2Vec.load("sem_eval_restaurant_model_add_data.vec")
 
 # Parameter
 learning_rate = 0.001
 training_epochs = 15
 batch_size = 100
-n_epochs = 15
-
+n_epochs = 30
+n_total_data = 0
 
 max_sentence_len = 74
-h_filter = 5
-n_filter = 50
+h_filter = 5  # height of filter
+n_filter = 256
 embed_vec_len = 100
-n_hidden = 30  # for hidden dense layer
+n_hidden = 128  # for hidden dense layer
 n_classes = 2
-
+threshold = 0.2
 
 # Data
 text_data_lst, category_data_lst = xml_reader.load_data_for_task_1_2()
@@ -70,10 +70,34 @@ for text_data, category_data in zip(text_data_lst[:TRAINING_INDEX], category_dat
         embedded_sentence_data.append([0.0] * 100)
 
     if len(category_data) == 0:
-        TRAIN_DATA[""].append(embedded_sentence_data)
+        TRAIN_DATA["NIL"].append(embedded_sentence_data)
     else:
         for category in category_data:
             TRAIN_DATA[category].append(embedded_sentence_data)
+
+
+# Add train data
+n_add_data = 100
+
+for cat in CATEGORY:
+    with open("data/{}.data".format(cat)) as f:
+        idx = 0
+        for line in f.readlines():
+            idx += 1
+            if idx == n_add_data:
+                break
+            if len(line.strip().split()) > 74:
+                continue
+
+            embedded_sentence_data = [list(sem_eval_restaurant_model.wv[word]) for word in line.strip().split()]
+
+            for _ in range(max_sentence_len - len(embedded_sentence_data)):
+                embedded_sentence_data.append([0.0] * 100)
+
+            TRAIN_DATA[cat].append(embedded_sentence_data)
+
+for data in TRAIN_DATA.values():
+    n_total_data += len(data)
 
 
 # Model
@@ -132,13 +156,13 @@ class SemEvalSlot1CNNModel(object):
         # Global Variable Initialize
         self.sess.run(tf.global_variables_initializer())
 
-        total_batch = int(TRAINING_INDEX / batch_size) + 1
+        total_batch = int(n_total_data / batch_size) + 1
+        print("Total Batch:", total_batch)
 
         for epoch in range(n_epochs):
-
             for i in range(total_batch):
                 index_start = i * batch_size
-                index_end = min(TRAINING_INDEX, (i + 1) * batch_size)
+                index_end = min(n_total_data, (i + 1) * batch_size)
                 batch_xs = self.input_data[index_start:index_end]
                 batch_xs = np.expand_dims(batch_xs, -1)
                 batch_ys = self.output_data[index_start:index_end]
@@ -148,18 +172,14 @@ class SemEvalSlot1CNNModel(object):
     def predict(self, text_lst):
         text_lst = np.expand_dims(text_lst, -1)
         d = self.sess.run(self.model, feed_dict={self.X: [text_lst]})
-        if self.sess.run(tf.argmax(d, 1))[0] == 0:
+        if self.sess.run(tf.nn.softmax(d))[0][0] >= threshold:
             return 1
         else:
             return 0
 
 
 if __name__ == "__main__":
-    models = [SemEvalSlot1CNNModel(cat) for cat in CATEGORY]
-
-    # for model in models:
-    #     model.train()
-    model0 = SemEvalSlot1CNNModel("")
+    model0 = SemEvalSlot1CNNModel('NIL')
     model1 = SemEvalSlot1CNNModel('RESTAURANT#GENERAL')
     model2 = SemEvalSlot1CNNModel('SERVICE#GENERAL')
     model3 = SemEvalSlot1CNNModel('FOOD#QUALITY')
@@ -187,7 +207,7 @@ if __name__ == "__main__":
     model11.train()
     model12.train()
 
-    with open("sem_eval_slot1_epoch_{}_hidden_{}.txt".format(n_epochs, n_hidden), "w") as f:
+    with open("sem_eval_slot1_epoch_{}_hidden_{}_filter_{}_adam_select_200.txt".format(n_epochs, n_hidden, n_filter), "w") as f:
         index = 0
         for text_data, category_data in zip(text_data_lst[TRAINING_INDEX:], category_data_lst[TRAINING_INDEX:]):
             index += 1
@@ -196,19 +216,25 @@ if __name__ == "__main__":
             for _ in range(max_sentence_len - len(embedded_sentence_data)):
                 embedded_sentence_data.append([0.0] * 100)
 
-            pred_lst = [model0.predict(embedded_sentence_data),
-             model1.predict(embedded_sentence_data),
-             model2.predict(embedded_sentence_data),
-             model3.predict(embedded_sentence_data),
-             model4.predict(embedded_sentence_data),
-             model5.predict(embedded_sentence_data),
-             model6.predict(embedded_sentence_data),
-             model7.predict(embedded_sentence_data),
-             model8.predict(embedded_sentence_data),
-             model9.predict(embedded_sentence_data),
-             model10.predict(embedded_sentence_data),
-             model11.predict(embedded_sentence_data),
-             model12.predict(embedded_sentence_data)]
+            pred_lst = [
+                model0.predict(embedded_sentence_data),
+                model1.predict(embedded_sentence_data),
+                model2.predict(embedded_sentence_data),
+                model3.predict(embedded_sentence_data),
+                model4.predict(embedded_sentence_data),
+                model5.predict(embedded_sentence_data),
+                model6.predict(embedded_sentence_data),
+                model7.predict(embedded_sentence_data),
+                model8.predict(embedded_sentence_data),
+                model9.predict(embedded_sentence_data),
+                model10.predict(embedded_sentence_data),
+                model11.predict(embedded_sentence_data),
+                model12.predict(embedded_sentence_data)
+            ]
+
+            if sum(pred_lst) == 0:
+                pred_lst[0] = 1
+
             print("{0:<10} :".format("Predction"), pred_lst)
             f.write("".join([str(x) for x in pred_lst]) + "\n")
 
@@ -217,16 +243,8 @@ if __name__ == "__main__":
             cat_index_lst = [CATEGORY_INDEX[cat] for cat in cat_lst]
 
             if len(cat_index_lst) == 0:
-                #print("{0:<10} :".format("True set"), [1] + [0] * 12)
+                print("{0:<10} :".format("True set"), [1] + [0] * 12)
                 f.write("1" + "0" * 12 + "\n")
             else:
-                #print("{0:<10} :".format("True set"), [1 if x in cat_index_lst else 0 for x in range(13)])
+                print("{0:<10} :".format("True set"), [1 if x in cat_index_lst else 0 for x in range(13)])
                 f.write("".join(["1" if x in cat_index_lst else "0" for x in range(13)]) + "\n")
-
-
-
-
-
-
-
-
