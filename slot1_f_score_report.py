@@ -1,7 +1,7 @@
 from f1_measure import bio_classification_report
 
 
-result_file_name = "cat_div_ver_add_data_epoch_30_hidden_128_filter_256_aaa.txt"
+result_file_name = "sem_eval_slot1_epoch_30_hidden_128_filter_256_adam_select_200_batch_50_em_nil.txt" 
 
 with open(result_file_name) as f:
     result_set = f.readlines()
