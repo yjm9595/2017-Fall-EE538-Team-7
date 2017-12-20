@@ -70,16 +70,46 @@ total_word_group={}
 for category in CATEGORY :
 	total_word_group[category] = sum(word_count_dict_group[category].values())
 
-with open('word_naive_bayes_probability.txt', 'w') as f:
-	f.write('{} {}\n'.format(len(word_count_dict.keys()), 12))
+reference_count = 0
+reference_count_group = {
+'NIL' : 0,
+'RESTAURANT#GENERAL' : 0,
+'SERVICE#GENERAL' : 0,
+'FOOD#QUALITY' : 0, 
+'DRINKS#QUALITY' : 0,
+'DRINKS#STYLE_OPTIONS' : 0,
+'FOOD#PRICES' : 0,
+'DRINKS#PRICES' : 0,
+'RESTAURANT#MISCELLANEOUS' : 0,
+'FOOD#STYLE_OPTIONS' : 0,
+'LOCATION#GENERAL' : 0, 
+'RESTAURANT#PRICES' : 0,
+'AMBIENCE#GENERAL' : 0
+}
+with open('stop_words.txt','r') as f:
+	line = f.readline()
+	for word in line.strip().split(',') :
+		reference_count += word_count_dict[word]
+		for category in ['NIL'] + CATEGORY :
+			try :
+				reference_count_group[category] += word_count_dict_group[category][word]
+			except KeyError :
+				pass
+			
+
+
+
+with open('word_naive_bayes_probability_normalized.txt', 'w') as f:
+	f.write('{} {}\n'.format(len(word_count_dict.keys()), 13))
 	for word in word_count_dict.keys() :
 		f.write('{} '.format(word.lower()))
-		total_prob=0
 		for category in ['NIL'] + CATEGORY :
 			if word_count_dict_group[category].get(word.lower()) == None :
 				f.write('0 ')
 			else :
-				f.write('{} '.format(word_count_dict_group[category][word.lower()] / word_count_dict[word.lower()]))
+				word_prob = word_count_dict_group[category][word.lower()] / word_count_dict[word.lower()]
+				reference_prob = reference_count_group[category] / reference_count 
+				f.write('{} '.format(word_prob / reference_prob))
 		f.write('\n')
 	
 total_word_group={}

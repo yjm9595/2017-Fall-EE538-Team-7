@@ -50,17 +50,17 @@ prob_data = KeyedVectors.load_word2vec_format('word_naive_bayes_probability.txt'
 #sem_eval_restaurant_model = KeyedVectors.load_word2vec_format('wiki.simple.vec')
 
 # NER Tag
-st = StanfordNERTagger('english.conll.4class.distsim.crf.ser.gz')
+st = StanfordNERTagger('english.muc.7class.distsim.crf.ser.gz')
 NER_dict = {
-'O' : 				[0, 0, 0, 0],
-'PERSON' : 			[1, 0, 0, 0],
-'LOCATION' : 		[0, 1, 0, 0],
-'ORGANIZATION' : 	[0, 0, 1, 0],
-'MISC' : 			[0, 0, 0, 1]
-#'MONEY' : 			[0, 0, 0, 1, 0, 0, 0],
-#'PERCENT' :  		[0, 0, 0, 0, 1, 0, 0],
-#'DATE' :  			[0, 0, 0, 0, 0, 1, 0], 
-#'TIME' :  			[0, 0, 0, 0, 0, 0, 1]
+'O' : 				[0, 0, 0, 0, 0, 0, 0],
+'PERSON' : 			[1, 0, 0, 0, 0, 0, 0],
+'LOCATION' : 		[0, 1, 0, 0, 0, 0, 0],
+'ORGANIZATION' : 	[0, 0, 1, 0, 0, 0, 0],
+#'MISC' : 			[0, 0, 0, 1]
+'MONEY' : 			[0, 0, 0, 1, 0, 0, 0],
+'PERCENT' :  		[0, 0, 0, 0, 1, 0, 0],
+'DATE' :  			[0, 0, 0, 0, 0, 1, 0], 
+'TIME' :  			[0, 0, 0, 0, 0, 0, 1]
 }
 
 
@@ -68,17 +68,18 @@ NER_dict = {
 learning_rate = 0.001
 training_epochs = 15
 batch_size = 100
-n_epochs = 30
+n_epochs = 100
 n_total_data = 0
 
 max_sentence_len = 74
 h_filter = 5  # height of filter
 n_filter = 256
 embed_vec_len = 100
-prob_len = 17
+prob_len = 13
 n_hidden = 128  # for hidden dense layer
 n_classes = 2
 threshold = 0.2
+keep_prob = 0.5
 
 # Data
 text_data_lst, category_data_lst = xml_reader.load_data_for_task_1_2()
@@ -86,16 +87,17 @@ text_data_lst, category_data_lst = xml_reader.load_data_for_task_1_2()
 for text_data, category_data in zip(text_data_lst[:TRAINING_INDEX], category_data_lst[:TRAINING_INDEX]):
     #embedded_sentence_data = [list(sem_eval_restaurant_model.wv[word]) for word in text_data]
 
-    tagged = st.tag(text_data);
-
+#    tagged = st.tag(text_data);
+    tagged = ['\0'] * len(text_data)
     embedded_sentence_data = []
+
     for word, tag in zip(text_data, tagged) :
         try : 
             embedded_sentence_data.append(list(sem_eval_restaurant_model.wv[word.lower()]))
         except KeyError:
             embedded_sentence_data.append([0.0] * embed_vec_len)
         embedded_sentence_data[-1] += list(prob_data.wv[word.lower()])
-        embedded_sentence_data[-1] += NER_dict[tag[1]]
+#        embedded_sentence_data[-1] += NER_dict[tag[1]]
    
 
     for _ in range(max_sentence_len - len(embedded_sentence_data)):
@@ -122,7 +124,8 @@ for cat in CATEGORY:
                 continue
 
             #embedded_sentence_data = [list(sem_eval_restaurant_model.wv[word]) for word in line.strip().split()]
-            tagged = st.tag(line.strip().split())
+#            tagged = st.tag(line.strip().split())
+            tagged = ['\0'] * len(line.strip().split())
             embedded_sentence_data = []
             for word, tag in zip(line.strip().split(), tagged) : 
                 try:
@@ -130,7 +133,7 @@ for cat in CATEGORY:
                 except KeyError:
                     embedded_sentence_data.append([0.0] * embed_vec_len)
                 embedded_sentence_data[-1] += list(prob_data.wv[word.lower()])
-                embedded_sentence_data[-1] += NER_dict[tag[1]]
+#                embedded_sentence_data[-1] += NER_dict[tag[1]]
         
 
             for _ in range(max_sentence_len - len(embedded_sentence_data)):
@@ -186,6 +189,9 @@ class SemEvalSlot1CNNModel(object):
         self.L2 = tf.matmul(self.L2, self.W2)
         self.L2 = tf.nn.relu(self.L2)
 
+        self.keep_prob = tf.placeholder(tf.float32)
+        self.L2 = tf.nn.dropout(self.L2, self.keep_prob)
+
         # Layer 3 - FC
         self.W3 = tf.Variable(tf.random_normal([n_hidden, n_classes]))
         self.model = tf.matmul(self.L2, self.W3)
@@ -209,7 +215,7 @@ class SemEvalSlot1CNNModel(object):
                 batch_xs = self.input_data[index_start:index_end]
                 batch_xs = np.expand_dims(batch_xs, -1)
                 batch_ys = self.output_data[index_start:index_end]
-                _, c = self.sess.run([optimizer, cost], feed_dict={self.X: batch_xs, self.Y: batch_ys})
+                _, c = self.sess.run([optimizer, cost], feed_dict={self.X: batch_xs, self.Y: batch_ys, self.keep_prob: keep_prob})
 
 #            right = 0
             #validation to stop loop
@@ -236,7 +242,7 @@ class SemEvalSlot1CNNModel(object):
 
     def predict(self, text_lst):
         text_lst = np.expand_dims(text_lst, -1)
-        d = self.sess.run(self.model, feed_dict={self.X: [text_lst]})
+        d = self.sess.run(self.model, feed_dict={self.X: [text_lst], self.keep_prob:1.0})
         if self.sess.run(tf.nn.softmax(d))[0][0] >= threshold:
             return 1
         else:
@@ -278,7 +284,8 @@ if __name__ == "__main__":
             index += 1
             print(index, "/ 685")
             #embedded_sentence_data = [list(sem_eval_restaurant_model.wv[word]) for word in text_data]
-            tagged = st.tag(text_data)
+#            tagged = st.tag(text_data)
+            tagged = ['\0'] * len(text_data)
             embedded_sentence_data = []
             for word, tag in zip(text_data, tagged) : 
                 try:
@@ -286,7 +293,7 @@ if __name__ == "__main__":
                 except KeyError:
                     embedded_sentence_data.append([0.0] * embed_vec_len)
                 embedded_sentence_data[-1] += list(prob_data.wv[word.lower()])
-                embedded_sentence_data[-1] += NER_dict[tag[1]]
+#                embedded_sentence_data[-1] += NER_dict[tag[1]]
 
             for _ in range(max_sentence_len - len(embedded_sentence_data)):
                 embedded_sentence_data.append([0.0] * (embed_vec_len + prob_len))
